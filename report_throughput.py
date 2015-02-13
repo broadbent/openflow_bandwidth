@@ -60,7 +60,7 @@ def main(argv):
 	elif switch is not None and port is not None:
 		print json.loads(http_client.call("report_port", port, switch), object_hook=decode_dict)
 	elif switch is not None:
-		print json.laods(http_client.call("report_switch_ports", switch), object_hook=decode_dict)
+		print json.loads(http_client.call("report_switch_ports", switch), object_hook=decode_dict)
 	else:
 		print usage
 

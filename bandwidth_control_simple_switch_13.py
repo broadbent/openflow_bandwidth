@@ -12,7 +12,7 @@ from ryu.lib.packet import ethernet
 from ryu.app.wsgi import ControllerBase, WSGIApplication, route
 from ryu.base import app_manager
 
-from rcp_server import *
+from rpc_server import *
 from SwitchPoll import *
 from multiprocessing import Process
 
@@ -33,16 +33,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         #init polling thread
 
         switchPoll = SwitchPoll()
-        pollThread = Thread(target=switchPoll.run, args=(1,self.datapathdict))
+        pollThread = Thread(target=switchPoll.run, args=(10,self.datapathdict))
         pollThread.start()
         print "Created polling threads"
 
         self.LAST_TP_DICT = {}
         self.MAX_TP_DICT = {}
 
-        Thread(target=rcp_server().run, args=(1,self.MAX_TP_DICT,self.add_meter_port,self.add_meter_service)).start()
-        print "Created rcp server"
-
+        Thread(target=rpc_server().run, args=(1,self.MAX_TP_DICT,self.add_meter_port,self.add_meter_service)).start()
         #-- Attempt at activly testing the network --#
         #poutTask = PacketOutLoop()
         #pollingThread2=Thread(target=poutTask.run,args=(10,self.datapathdict))
@@ -52,10 +50,9 @@ class SimpleSwitch13(app_manager.RyuApp):
         self.datapathID_to_meters = {}
 
         #Meter id for per flow based meters (Dont want port and flow meter ids conflicting)
-        #starts at 50, hp
+        #starts at 53, hp
+        # meter_id= 53
         self.datapathID_to_meter_ID= {}
-
-
 	self.datapath_to_flows = {}
 
 
@@ -155,10 +152,10 @@ class SimpleSwitch13(app_manager.RyuApp):
         print "ADDING METER FOR SERVICE"
         datapath_id=int(datapath_id)
 	if datapath_id not in self.datapathdict:
+            print "### Error: datapath_id not in self.datapathdict"
             return -1
-        datapath= self.datapathdict[datapath_id]
-        meter_id= 50
-        flows = {}
+        else:
+            datapath= self.datapathdict[datapath_id]
 
 	speed= int(speed)
 
@@ -169,6 +166,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         if datapath_id in self.datapath_to_flows:
             flows = self.datapath_to_flows[datapath_id]
         else:
+            flows = {}
             self.datapath_to_flows[datapath_id]=flows
        
 
@@ -176,6 +174,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         if datapath_id in self.datapathID_to_meter_ID:
             meter_id = self.datapathID_to_meter_ID[datapath_id]
         else:
+            meter_id=53
             self.datapathID_to_meter_ID[datapath_id]=meter_id
 
 
@@ -206,14 +205,14 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         #create flow with <src> and <dst> - with a higher priority than normal switch behaviour -
         #action NORMAL && link to meter
-        match = parser.OFPMatch(ipv4_src=src_addr, ipv4_dst=dst_addr)
+        match = parser.OFPMatch(eth_type=0x800, ipv4_src=src_addr, ipv4_dst=dst_addr)
         actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
 
 
         self.add_flow(datapath, 100, match, actions, buffer_id=None, meter=meter_id, timeout=0)
 
 
-        meter_id = meter_id + 1
+        self.datapathID_to_meter_ID[datapath_id]=meter_id+1
 
         return 1
 
@@ -297,10 +296,10 @@ class SimpleSwitch13(app_manager.RyuApp):
             # verify if we have a valid buffer_id, if yes avoid to send both
             # flow_mod & packet_out
             if msg.buffer_id != ofproto.OFP_NO_BUFFER:
-                self.add_flow(datapath, 2, match, actions, msg.buffer_id, timeout=60)
+                self.add_flow(datapath, 2, match, actions, msg.buffer_id, meter=out_port, timeout=60)
                 return
             else:
-                self.add_flow(datapath, 2, match, actions, timeout=60)
+                self.add_flow(datapath, 2, match, actions, meter=out_port, timeout=60)
         data = None
         if msg.buffer_id == ofproto.OFP_NO_BUFFER:
             data = msg.data
