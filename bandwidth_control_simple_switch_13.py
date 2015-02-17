@@ -317,19 +317,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         currentSentTP=0
         currentRecievedTP=0
 
-        #self.logger.info('##### SWITCH:%d #####',ev.msg.datapath.id)
-        #If contains this datapath then use it, if not
-        if ev.msg.datapath.id in self.MAX_TP_DICT:
-            currentMaxDictionary= self.MAX_TP_DICT[ev.msg.datapath.id]
-        else:
+        # currentMaxDictionary and currentLastDictionary are just references to the applicable ersistent dictionary slice
+        if ev.msg.datapath.id not in self.MAX_TP_DICT:
             self.MAX_TP_DICT[ev.msg.datapath.id]={}
-            currentMaxDictionary=self.MAX_TP_DICT[ev.msg.datapath.id]
+        currentMaxDictionary= self.MAX_TP_DICT[ev.msg.datapath.id]
 
-        if ev.msg.datapath.id in self.LAST_TP_DICT:
-            currentLastDictionary = self.LAST_TP_DICT[ev.msg.datapath.id]
-        else:
+        if ev.msg.datapath.id not in self.LAST_TP_DICT:
             self.LAST_TP_DICT[ev.msg.datapath.id]={}
-            currentLastDictionary=self.LAST_TP_DICT[ev.msg.datapath.id]
+        currentLastDictionary=self.LAST_TP_DICT[ev.msg.datapath.id]
 
 
 

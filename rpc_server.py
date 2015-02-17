@@ -20,14 +20,18 @@ class rpc_server:
 class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
 	def report_port(self, switch, port):
+                print "report_port(switch=%s, port=%s)" % ( switch , port )
 		return json.dumps(self.server.max_throughput[switch.encode('ascii')][int(port)])
 
 	@pyjsonrpc.rpcmethod
 	def report_switch_ports(self, switch):
-		return json.dumps(self.server.max_throughput[switch.encode('ascii')])
+                print "report_switch_ports(switch=%s)" % switch
+		return self.server.max_throughput[switch.encode('ascii')]
+		# return json.dumps(self.server.max_throughput[switch.encode('ascii')])
 
 	@pyjsonrpc.rpcmethod
 	def report_all_ports(self):
+                print "report_all_ports()"
 		return self.server.max_throughput
 
 	@pyjsonrpc.rpcmethod

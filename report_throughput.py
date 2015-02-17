@@ -1,6 +1,16 @@
 #!/usr/bin/python
 # coding: utf-8
 
+
+# This is the command line interface to the JSON-RPC service for the services report_all_ports, report_port and report_switch_ports
+# implemented in the server enforce_bandwodth_simple_switch
+# if called with -a (for all) then report_all_ports is invoked
+# if called with -s (for switch) then report_all_ports is invoked
+# unless -p (ports) is also given, in which case report_port is called
+#
+# In every case, the output from the RPC call is simply printed as a python object, decoded from the JSON response
+
+
 import json
 import pyjsonrpc
 import sys, getopt
@@ -58,7 +68,7 @@ def main(argv):
 	if al == True:
 		print http_client.call("report_all_ports")
 	elif switch is not None and port is not None:
-		print json.loads(http_client.call("report_port", port, switch), object_hook=decode_dict)
+		print json.loads(http_client.call("report_port", switch, port), object_hook=decode_dict)
 	elif switch is not None:
 		print json.loads(http_client.call("report_switch_ports", switch), object_hook=decode_dict)
 	else:
