@@ -14,6 +14,7 @@
 import json
 import pyjsonrpc
 import sys, getopt
+from pprint import pprint
 
 def __init__(self):
 	http_client = None
@@ -66,11 +67,13 @@ def main(argv):
 			sys.exit(2)
 
 	if al == True:
-		print http_client.call("report_all_ports")
+		pprint(http_client.call("report_all_ports"))
 	elif switch is not None and port is not None:
-		print json.loads(http_client.call("report_port", switch, port), object_hook=decode_dict)
+		pprint(http_client.call("report_port", switch, port))
+		#print json.loads(http_client.call("report_port", switch, port), object_hook=decode_dict)
 	elif switch is not None:
-		print json.loads(http_client.call("report_switch_ports", switch), object_hook=decode_dict)
+		pprint(http_client.call("report_switch_ports", switch))
+		# print json.loads(http_client.call("report_switch_ports", switch), object_hook=decode_dict)
 	else:
 		print usage
 

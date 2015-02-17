@@ -317,7 +317,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         currentSentTP=0
         currentRecievedTP=0
 
-        # currentMaxDictionary and currentLastDictionary are just references to the applicable ersistent dictionary slice
+        # currentMaxDictionary and currentLastDictionary are just references to the applicable persistent dictionary slice
         if ev.msg.datapath.id not in self.MAX_TP_DICT:
             self.MAX_TP_DICT[ev.msg.datapath.id]={}
         currentMaxDictionary= self.MAX_TP_DICT[ev.msg.datapath.id]
