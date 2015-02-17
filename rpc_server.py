@@ -22,13 +22,10 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
 	def report_port(self, switch, port):
                 print "report_port(switch=%s, port=%s)" % ( switch , port )
-		# return json.dumps(self.server.max_throughput[switch.encode('ascii')][int(port)])
                 if  int(switch) in self.server.max_throughput:
                     if int(port) in self.server.max_throughput[int(switch)]:
                         print "port reference OK"
-                        reply = self.server.max_throughput[int(switch)][int(port)]
-                        print reply
-                        return reply
+                        return self.server.max_throughput[int(switch)][int(port)]
                     else:
                         print "invalid port reference"
                         return {}
@@ -39,19 +36,11 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
 	def report_switch_ports(self, switch):
                 print "report_switch_ports(switch=%s)" % switch
-                # pprint(self.server.max_throughput)
-                # print "keys: ", self.server.max_throughput.keys()
-                # print switch, switch.encode('ascii')
                 if  int(switch) in self.server.max_throughput:
-                    # print "switch reference OK"
-                    reply = self.server.max_throughput[int(switch)]
-                    # print reply
-                    return reply
+                    return self.server.max_throughput[int(switch)]
                 else:
                     print "invalid switch reference"
                     return {}
-		# return self.server.max_throughput[switch.encode('ascii')]
-		# return json.dumps(self.server.max_throughput[switch.encode('ascii')])
 
 	@pyjsonrpc.rpcmethod
 	def report_all_ports(self):
