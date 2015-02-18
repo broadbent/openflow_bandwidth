@@ -321,7 +321,8 @@ class SimpleSwitch13(app_manager.RyuApp):
             unpacked = {}
             for statsEntry in portStats:
                 port = statsEntry.port_no
-                unpacked[port] = TimedStatRecord (statsEntry.tx_packets, statsEntry.rx_packets, statsEntry.tx_bytes, statsEntry.rx_bytes, statsEntry.duration_sec, statsEntry.duration_nsec )
+                if port != 4294967294: # this magic number is the 'local'port, which is not real....
+                    unpacked[port] = TimedStatRecord (statsEntry.tx_packets, statsEntry.rx_packets, statsEntry.tx_bytes, statsEntry.rx_bytes, statsEntry.duration_sec, statsEntry.duration_nsec )
             return unpacked
 
         currentSentTP=0
@@ -339,7 +340,8 @@ class SimpleSwitch13(app_manager.RyuApp):
             self.MAX_TP_DICT[ev.msg.datapath.id] = {}
             maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
             for statsEntry in ev.msg.body:
-                maxStats[statsEntry.port_no] = StatRecord(0,0,0,0)
+                if statsEntry.port_no != 4294967294: # this magic number is the 'local'port, which is not real....
+                    maxStats[statsEntry.port_no] = StatRecord(0,0,0,0)
 
         # we have a previous stats record so it is now possible to calculate the delta
         else:
