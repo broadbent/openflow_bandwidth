@@ -19,13 +19,16 @@ from multiprocessing import Process
 import os
 from threading import *
 from pprint import pprint
+from zlib import crc32
 import pyjsonrpc
 from collections import namedtuple
 
 PATH = os.path.dirname(__file__)
 
-StatRecord = namedtuple('StatRecord',['tx_packets','rx_packets','tx_bytes','rx_bytes'])
-TimedStatRecord = namedtuple('TimedStatRecord',['tx_packets','rx_packets','tx_bytes','rx_bytes', 'duration_sec','duration_nsec'])
+StatRecord = namedtuple('StatRecord', ['tx_packets','rx_packets','tx_bytes','rx_bytes'])
+TimedStatRecord = namedtuple('TimedStatRecord', ['tx_packets','rx_packets','tx_bytes','rx_bytes', 'duration_sec','duration_nsec'])
+FlowStatRecord = namedtuple('TimedFlowStatRecord', ['packet_count', 'byte_count', 'match', 'table_id', 'priority'])
+TimedFlowStatRecord = namedtuple('TimedFlowStatRecord', ['packet_count', 'byte_count', 'match', 'table_id', 'priority', 'duration_sec', 'duration_nsec'])
 
 class SimpleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -88,26 +91,27 @@ class SimpleSwitch13(app_manager.RyuApp):
 
 
     #Add flow modified to allow meters
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None, meter=None, timeout=0):
+    def add_flow(self, datapath, priority, match, actions, buffer_id=None, meter=None, timeout=0, cookie=0):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
+        print ("Add flow, %s" % hex(cookie))
 
-        print "The meter is :",meter
+        # print "The meter is :",meter
         if meter != None:
-            print "Sending flow mod with meter instruction, meter :", meter
+            # print "Sending flow mod with meter instruction, meter :", meter
             inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions),parser.OFPInstructionMeter(meter)]
         else:
-            print "Not sending instruction"
+            # print "Not sending instruction"
             inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS,actions)]
         if buffer_id:
             mod = parser.OFPFlowMod(datapath=datapath, buffer_id=buffer_id,
                                     priority=priority, match=match,
                                     instructions=inst, hard_timeout=timeout,
-                                    idle_timeout=timeout, table_id=100)
+                                    idle_timeout=timeout, table_id=100, cookie=cookie)
         else:
             mod = parser.OFPFlowMod(datapath=datapath, priority=priority,
                                     match=match, instructions=inst,
-                                    hard_timeout=timeout, idle_timeout=timeout, table_id=100)
+                                    hard_timeout=timeout, idle_timeout=timeout, table_id=100, cookie=cookie)
         datapath.send_msg(mod)
 
         #Edit this
@@ -213,8 +217,9 @@ class SimpleSwitch13(app_manager.RyuApp):
         match = parser.OFPMatch(eth_type=0x800, ipv4_src=src_addr, ipv4_dst=dst_addr)
         actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
 
-
-        self.add_flow(datapath, 100, match, actions, buffer_id=None, meter=meter_id, timeout=0)
+        cookie = 0x7fffffff & crc32(str(datapath)+src_addr+dst_addr)
+        print "cookie: %s" % hex(cookie)
+        self.add_flow(datapath, 100, match, actions, buffer_id=None, meter=meter_id, timeout=0, cookie=cookie)
 
 
         self.datapathID_to_meter_ID[datapath_id]=meter_id+1
@@ -313,7 +318,31 @@ class SimpleSwitch13(app_manager.RyuApp):
                                   in_port=in_port, actions=actions, data=data)
         datapath.send_msg(out)
 
-    #handle stats replies
+
+
+    #handle flow stats replies
+    @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
+    def flow_stats_reply_handler(self, ev):
+
+        def _unpack(flowStats):
+            unpacked = {}
+            for statsEntry in flowStats:
+                cookie = statsEntry.cookie
+                if cookie != 0: # we only will collect statistics which we have marked with a cookie...
+                    pprint(statsEntry)
+                    unpacked[cookie] = TimedFlowStatRecord (statsEntry.packet_count, statsEntry.byte_count, statsEntry.match, statsEntry.table_id, statsEntry.priority, statsEntry.duration_sec, statsEntry.duration_nsec )
+                    pprint(unpacked)
+            return unpacked
+
+        self.logger.info("flow_stats_reply_handler - switch %d", ev.msg.datapath.id )
+        # pprint(ev.msg.datapath.id)
+        # pprint(ev.msg.body)
+        flowStats = _unpack(ev.msg.body)
+        print "flow stats:"
+        pprint(flowStats)
+
+
+    #handle port stats replies
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def port_stats_reply_handler(self, ev):
 
@@ -325,17 +354,11 @@ class SimpleSwitch13(app_manager.RyuApp):
                     unpacked[port] = TimedStatRecord (statsEntry.tx_packets, statsEntry.rx_packets, statsEntry.tx_bytes, statsEntry.rx_bytes, statsEntry.duration_sec, statsEntry.duration_nsec )
             return unpacked
 
-        currentSentTP=0
-        currentRecievedTP=0
-
-        # pprint(ev.msg.datapath.id)
-        # pprint(ev.msg.body)
-
         # currentMaxDictionary and currentLastDictionary are just references to the applicable persistent dictionary slice
 
         # on first entry for a switch just save the stats, initiliase the max counters to zero and exit
         if ev.msg.datapath.id not in self.LAST_TP_DICT:
-            self.logger.info("port_stats_reply_handler - first entry for switch %d", ev.msg.datapath.id )
+            # self.logger.info("port_stats_reply_handler - first entry for switch %d", ev.msg.datapath.id )
             self.LAST_TP_DICT[ev.msg.datapath.id] = _unpack(ev.msg.body)
             self.MAX_TP_DICT[ev.msg.datapath.id] = {}
             maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
@@ -345,10 +368,10 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         # we have a previous stats record so it is now possible to calculate the delta
         else:
-            self.logger.info("port_stats_reply_handler - repeat entry for switch %d", ev.msg.datapath.id )
+            # self.logger.info("port_stats_reply_handler - repeat entry for switch %d", ev.msg.datapath.id )
             oldStats = self.LAST_TP_DICT[ev.msg.datapath.id]
             newStats = _unpack(ev.msg.body)
-            # pprint(newStats)
+            
             # save away this dataset for the next time around...
             self.LAST_TP_DICT[ev.msg.datapath.id] = newStats
             maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
@@ -376,11 +399,13 @@ class SimpleSwitch13(app_manager.RyuApp):
                                               max(maxStats[port].tx_bytes,delta[port].tx_bytes),
                                               max(maxStats[port].rx_bytes,delta[port].rx_bytes) )
 
-            print "oldStats"
-            pprint(oldStats)
-            print "newStats"
-            pprint(newStats)
-            print "delta"
-            pprint(delta)
-            print "maxStats"
-            pprint(maxStats)
+# visualise the stats in the server side
+
+            # print "oldStats"
+            # pprint(oldStats)
+            # print "newStats"
+            # pprint(newStats)
+            # print "delta"
+            # pprint(delta)
+            # print "maxStats"
+            # pprint(maxStats)

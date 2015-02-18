@@ -24,7 +24,6 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
                 print "report_port(switch=%s, port=%s)" % ( switch , port )
                 if  int(switch) in self.server.max_throughput:
                     if int(port) in self.server.max_throughput[int(switch)]:
-                        print "port reference OK"
                         return self.server.max_throughput[int(switch)][int(port)]
                     else:
                         print "invalid port reference"
