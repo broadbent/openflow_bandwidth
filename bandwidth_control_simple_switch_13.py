@@ -18,6 +18,7 @@ from multiprocessing import Process
 
 import os
 from threading import *
+from pprint import pprint
 import pyjsonrpc
 
 PATH = os.path.dirname(__file__)
@@ -311,76 +312,93 @@ class SimpleSwitch13(app_manager.RyuApp):
     #handle stats replies
     @set_ev_cls(ofp_event.EventOFPPortStatsReply, MAIN_DISPATCHER)
     def port_stats_reply_handler(self, ev):
-        ports = []
-        currentMaxDictionary={}
-        currentLastDictionary={}
+
+        def _unpack(portStats):
+            unpacked = {}
+            for statsEntry in portStats:
+                port = statsEntry.port_no
+                unpacked[port] = { "tx_packets" : statsEntry.tx_packets,
+                                   "rx_packets" : statsEntry.rx_packets,
+                                   "tx_bytes" : statsEntry.tx_bytes,
+                                   "rx_bytes" : statsEntry.rx_bytes,
+                                   "duration_sec" : statsEntry.duration_sec,
+                                   "duration_nsec" : statsEntry.duration_nsec }
+            return unpacked
+
         currentSentTP=0
         currentRecievedTP=0
 
+        # pprint(ev.msg.datapath.id)
+        # pprint(ev.msg.body)
+
         # currentMaxDictionary and currentLastDictionary are just references to the applicable persistent dictionary slice
-        if ev.msg.datapath.id not in self.MAX_TP_DICT:
-            self.MAX_TP_DICT[ev.msg.datapath.id]={}
-        currentMaxDictionary= self.MAX_TP_DICT[ev.msg.datapath.id]
 
+        # on first entry for a switch just save the stats, initiliase the max counters to zero and exit
         if ev.msg.datapath.id not in self.LAST_TP_DICT:
-            self.LAST_TP_DICT[ev.msg.datapath.id]={}
-        currentLastDictionary=self.LAST_TP_DICT[ev.msg.datapath.id]
+            self.logger.info("port_stats_reply_handler - first entry for switch %d", ev.msg.datapath.id )
+            self.LAST_TP_DICT[ev.msg.datapath.id] = _unpack(ev.msg.body)
+            self.MAX_TP_DICT[ev.msg.datapath.id] = {}
+            maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
+            for statsEntry in ev.msg.body:
+                # maxStats[statsEntry.port_no].tx_packets=0
+                # maxStats[statsEntry.port_no].rx_packets=0
+                # maxStats[statsEntry.port_no].tx_bytes=0
+                # maxStats[statsEntry.port_no].rx_bytes=0
+                maxStats[statsEntry.port_no] = { "tx_packets":0, "rx_packets":0, "tx_bytes":0, "rx_bytes":0}
 
+        # we have a previous stats record so it is now possible to calculate the delta
+        else:
+            self.logger.info("port_stats_reply_handler - repeat entry for switch %d", ev.msg.datapath.id )
+            oldStats = self.LAST_TP_DICT[ev.msg.datapath.id]
+            newStats = _unpack(ev.msg.body)
+            # pprint(newStats)
+            # save away this dataset for the next time around...
+            self.LAST_TP_DICT[ev.msg.datapath.id] = newStats
+            maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
+            # calculate deltas for all of the cumulative fields (tx/rx_packets/bytes,duration_sec/nsec)
+            # and also calculate new max values for all deltas
+            delta = {}
+            for port in newStats:
 
+                print "oldStats",port
+                pprint(oldStats[port])
+                print dir(oldStats[port])
+                print "newStats",port
+                pprint(newStats[port])
+                print dir(newStats[port])
 
-        for stat in ev.msg.body:
-        #    self.logger.info('PortStats: Port:%d Duration nsec: %s Duration sec:%s Sent bytes: %s Recieved bytes %s',stat.port_no, stat.duration_nsec, stat.duration_sec, stat.tx_bytes, stat.rx_bytes)
+                print ("tx_packets %d %d %d\n" , newStats[port].tx_packets , oldStats[port].tx_packets , newStats[port].tx_packets - oldStats[port].tx_packets)
+                               # "rx_packets" : newStats[port].rx_packets - oldStats[port].rx_packets,
+                               # "tx_bytes" : newStats[port].tx_bytes - oldStats[port].tx_bytes,
+                               # "rx_bytes" : newStats[port].rx_bytes - oldStats[port].rx_bytes,
 
-            #self.logger.info('------------Port:%d-------------',stat.port_no)
+                delta[port] = {"tx_packets" : newStats[port].tx_packets - oldStats[port].tx_packets,
+                               "rx_packets" : newStats[port].rx_packets - oldStats[port].rx_packets,
+                               "tx_bytes" : newStats[port].tx_bytes - oldStats[port].tx_bytes,
+                               "rx_bytes" : newStats[port].rx_bytes - oldStats[port].rx_bytes,
+                               "duration_sec" : 0,
+                               "duration_nsec" : 0 }
 
-            if stat.port_no in currentLastDictionary:
-                currentSentTP = stat.tx_bytes-(currentLastDictionary[stat.port_no])[0]
-                currentRecievedTP = stat.rx_bytes-(currentLastDictionary[stat.port_no])[1]
-                #print('Current sent bytes per second =', currentSentTP)
-                #print('Current recieved bytes per second =', currentRecievedTP)
+                maxStats[port] = { "rx_bytes" : max(maxStats[port].rx_bytes,delta[port].rx_packets),
+                                   "tx_bytes" : max(maxStats[port].tx_bytes,delta[port].tx_packets),
+                                   "rx_packets" : max(maxStats[port].rx_packets,delta[port].rx_packets),
+                                   "tx_packets" : max(maxStats[port].tx_packets,delta[port].tx_packets) }
 
-            currentLastDictionary[stat.port_no] = [stat.tx_bytes,stat.rx_bytes,stat.duration_nsec]
+                # calculate the delta time correctly....
+                # need someone to check my logic (or find a library function for doing arithmetic on these split time values)
 
+                if newStats[port].duration_nsec < oldStats[port].duration_nsec:
+                    delta[port].duration_sec = newStats[port].duration_sec - oldStats[port].duration_sec -1
+                    delta[port].duration_nsec = oldStats[port].duration_nsec - newStats[port].duration_nsec
+                else:
+                    delta[port].duration_sec = newStats[port].duration_sec - oldStats[port].duration_sec
+                    delta[port].duration_nsec = newStats[port].duration_nsec - oldStats[port].duration_nsec
 
-            if stat.port_no in currentMaxDictionary:
-                #If SENT bytes is greater then save it as max
-                if currentSentTP>currentMaxDictionary[stat.port_no][0]:
-                    currentMaxDictionary[stat.port_no][0]=currentSentTP
-
-                #If RECIEVED bytes is greater then save it as max
-                if currentRecievedTP>currentMaxDictionary[stat.port_no][1]:
-                    currentMaxDictionary[stat.port_no][1]=currentRecievedTP
-            else:
-                #else init current max
-                currentMaxDictionary[stat.port_no]=[currentSentTP,currentRecievedTP]
-
-
-
-            #Unused method left for reference
-            ports.append('port_no=%d '
-                         'rx_packets=%d tx_packets=%d '
-                         'rx_bytes=%d tx_bytes=%d '
-                         'rx_dropped=%d tx_dropped=%d '
-                         'rx_errors=%d tx_errors=%d '
-                         'rx_frame_err=%d rx_over_err=%d rx_crc_err=%d '
-                         'collisions=%d duration_sec=%d duration_nsec=%d' %
-                         (stat.port_no,
-                          stat.rx_packets, stat.tx_packets,
-                          stat.rx_bytes, stat.tx_bytes,
-                          stat.rx_dropped, stat.tx_dropped,
-                          stat.rx_errors, stat.tx_errors,
-                          stat.rx_frame_err, stat.rx_over_err,
-                          stat.rx_crc_err, stat.collisions,
-                          stat.duration_sec, stat.duration_nsec))
-        #print('MAX THROUGHPUT :',currentMaxDictionary)
-        #print('MAX_TP_DICT: ', self.MAX_TP_DICT)
-        #self.http_client.notify("add", ev.msg.datapath.id, currentMaxDictionary)
-        #print currentMaxDictionary
-
-
-#Added ryu apps for rest intergation
-#app_manager.require_app('ryu.app.rest_topology')
-#app_manager.require_app('ryu.app.ws_topology')
-#app_manager.require_app('ryu.app.ofctl_rest')
-#Ryu gui app works with little success
-#app_manager.require_app('ryu.app.gui_topology')
+            print "oldStats"
+            pprint(oldStats)
+            print "newStats"
+            pprint(newStats)
+            print "delta"
+            pprint(delta)
+            print "maxStats"
+            pprint(maxStats)

@@ -62,15 +62,3 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
 	def enforce_service(self, switch, src, dst, speed):
 		self.server.add_meter_service(switch.encode('ascii'), src.encode('ascii'), dst.encode('ascii'), int(speed))
-
-
-
-
-
-
-
-
-
-
-
-
