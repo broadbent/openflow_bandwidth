@@ -20,8 +20,12 @@ import os
 from threading import *
 from pprint import pprint
 import pyjsonrpc
+from collections import namedtuple
 
 PATH = os.path.dirname(__file__)
+
+StatRecord = namedtuple('StatRecord',['tx_packets','rx_packets','tx_bytes','rx_bytes'])
+TimedStatRecord = namedtuple('TimedStatRecord',['tx_packets','rx_packets','tx_bytes','rx_bytes', 'duration_sec','duration_nsec'])
 
 class SimpleSwitch13(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
@@ -317,12 +321,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             unpacked = {}
             for statsEntry in portStats:
                 port = statsEntry.port_no
-                unpacked[port] = { "tx_packets" : statsEntry.tx_packets,
-                                   "rx_packets" : statsEntry.rx_packets,
-                                   "tx_bytes" : statsEntry.tx_bytes,
-                                   "rx_bytes" : statsEntry.rx_bytes,
-                                   "duration_sec" : statsEntry.duration_sec,
-                                   "duration_nsec" : statsEntry.duration_nsec }
+                unpacked[port] = TimedStatRecord (statsEntry.tx_packets, statsEntry.rx_packets, statsEntry.tx_bytes, statsEntry.rx_bytes, statsEntry.duration_sec, statsEntry.duration_nsec )
             return unpacked
 
         currentSentTP=0
@@ -340,11 +339,7 @@ class SimpleSwitch13(app_manager.RyuApp):
             self.MAX_TP_DICT[ev.msg.datapath.id] = {}
             maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
             for statsEntry in ev.msg.body:
-                # maxStats[statsEntry.port_no].tx_packets=0
-                # maxStats[statsEntry.port_no].rx_packets=0
-                # maxStats[statsEntry.port_no].tx_bytes=0
-                # maxStats[statsEntry.port_no].rx_bytes=0
-                maxStats[statsEntry.port_no] = { "tx_packets":0, "rx_packets":0, "tx_bytes":0, "rx_bytes":0}
+                maxStats[statsEntry.port_no] = StatRecord(0,0,0,0)
 
         # we have a previous stats record so it is now possible to calculate the delta
         else:
@@ -360,39 +355,24 @@ class SimpleSwitch13(app_manager.RyuApp):
             delta = {}
             for port in newStats:
 
-                print "oldStats",port
-                pprint(oldStats[port])
-                print dir(oldStats[port])
-                print "newStats",port
-                pprint(newStats[port])
-                print dir(newStats[port])
-
-                print ("tx_packets %d %d %d\n" , newStats[port].tx_packets , oldStats[port].tx_packets , newStats[port].tx_packets - oldStats[port].tx_packets)
-                               # "rx_packets" : newStats[port].rx_packets - oldStats[port].rx_packets,
-                               # "tx_bytes" : newStats[port].tx_bytes - oldStats[port].tx_bytes,
-                               # "rx_bytes" : newStats[port].rx_bytes - oldStats[port].rx_bytes,
-
-                delta[port] = {"tx_packets" : newStats[port].tx_packets - oldStats[port].tx_packets,
-                               "rx_packets" : newStats[port].rx_packets - oldStats[port].rx_packets,
-                               "tx_bytes" : newStats[port].tx_bytes - oldStats[port].tx_bytes,
-                               "rx_bytes" : newStats[port].rx_bytes - oldStats[port].rx_bytes,
-                               "duration_sec" : 0,
-                               "duration_nsec" : 0 }
-
-                maxStats[port] = { "rx_bytes" : max(maxStats[port].rx_bytes,delta[port].rx_packets),
-                                   "tx_bytes" : max(maxStats[port].tx_bytes,delta[port].tx_packets),
-                                   "rx_packets" : max(maxStats[port].rx_packets,delta[port].rx_packets),
-                                   "tx_packets" : max(maxStats[port].tx_packets,delta[port].tx_packets) }
-
-                # calculate the delta time correctly....
-                # need someone to check my logic (or find a library function for doing arithmetic on these split time values)
-
                 if newStats[port].duration_nsec < oldStats[port].duration_nsec:
-                    delta[port].duration_sec = newStats[port].duration_sec - oldStats[port].duration_sec -1
-                    delta[port].duration_nsec = oldStats[port].duration_nsec - newStats[port].duration_nsec
+                    delta_sec = newStats[port].duration_sec - oldStats[port].duration_sec -1
+                    delta_nsec = oldStats[port].duration_nsec - newStats[port].duration_nsec
                 else:
-                    delta[port].duration_sec = newStats[port].duration_sec - oldStats[port].duration_sec
-                    delta[port].duration_nsec = newStats[port].duration_nsec - oldStats[port].duration_nsec
+                    delta_sec = newStats[port].duration_sec - oldStats[port].duration_sec
+                    delta_nsec = newStats[port].duration_nsec - oldStats[port].duration_nsec
+
+                delta[port] = TimedStatRecord (newStats[port].tx_packets - oldStats[port].tx_packets,
+                                               newStats[port].rx_packets - oldStats[port].rx_packets,
+                                               newStats[port].tx_bytes - oldStats[port].tx_bytes,
+                                               newStats[port].rx_bytes - oldStats[port].rx_bytes,
+                                               delta_sec,
+                                               delta_nsec )
+
+                maxStats[port] = StatRecord ( max(maxStats[port].tx_packets,delta[port].tx_packets),
+                                              max(maxStats[port].rx_packets,delta[port].rx_packets),
+                                              max(maxStats[port].tx_bytes,delta[port].tx_bytes),
+                                              max(maxStats[port].rx_bytes,delta[port].rx_bytes) )
 
             print "oldStats"
             pprint(oldStats)
