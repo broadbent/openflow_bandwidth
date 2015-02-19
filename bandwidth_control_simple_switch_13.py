@@ -94,7 +94,6 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         #Add new switches for polling
         self.datapathdict[datapath.id]=datapath
-	#	self.add_meter_service(datapath.id, "10.1.1.1", "10.1.1.2", 200)
 
 
 
@@ -233,7 +232,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         self.datapathID_to_meter_ID[datapath_id]=meter_id+1
 
-        return 1
+        return meter_id
 
     def add_meter_flow(self, datapath_id, flow_id, speed):
         #add meter to an existing flow through normal switch behaviour

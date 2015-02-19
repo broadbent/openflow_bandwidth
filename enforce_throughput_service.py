@@ -30,7 +30,8 @@ def main(argv):
 	dst = args[2]
 	speed = args[3]
 
-	http_client.notify("enforce_service", switch, src, dst, speed)
+	meter_id = http_client.call("enforce_service", switch, src, dst, speed)
+        print "Meter ID is: %d" % meter_id
 
 if __name__ == '__main__':
 	main(sys.argv[1:])
