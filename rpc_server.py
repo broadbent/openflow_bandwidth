@@ -16,15 +16,18 @@ class rpc_server:
 		http_server.add_meter_port = add_meter_port
 		http_server.add_meter_service = add_meter_service
 		http_server.port_rate = port_rate
+		http_server.port_max = port_max
+		http_server.flow_rate = flow_rate
+		http_server.flow_max = flow_max
 		http_server.serve_forever()
 
 class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
-	def report_port(self, switch, port):
-                # print "report_port(switch=%s, port=%s)" % ( switch , port )
-                if  int(switch) in self.server.port_rate:
-                    if int(port) in self.server.port_rate[int(switch)]:
-                        return self.server.port_rate[int(switch)][int(port)]
+	def report_port(self,  max_wanted, switch, port):
+                stats = self.server.port_max if max_wanted else self.server.port_rate
+                if  int(switch) in stats:
+                    if int(port) in stats[int(switch)]:
+                        return stats[int(switch)][int(port)]
                     else:
                         print "invalid port reference"
                         return {}
@@ -33,18 +36,19 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
                     return {}
 
 	@pyjsonrpc.rpcmethod
-	def report_switch_ports(self, switch):
-                # print "report_switch_ports(switch=%s)" % switch
-                if  int(switch) in self.server.port_rate:
-                    return self.server.port_rate[int(switch)]
+	def report_switch_ports(self, max_wanted,  switch):
+                stats = self.server.port_max if max_wanted else self.server.port_rate
+                if  int(switch) in stats:
+                    return stats[int(switch)]
                 else:
                     print "invalid switch reference"
                     return {}
 
 	@pyjsonrpc.rpcmethod
-	def report_all_ports(self):
-                # print "report_all_ports()"
-		return self.server.port_rate
+	def report_all_ports(self, max_wanted):
+                stats = self.server.port_max if max_wanted else self.server.port_rate
+                pprint(stats)
+		return stats
 
 	@pyjsonrpc.rpcmethod
 	def reset_port(self, switch, port):
