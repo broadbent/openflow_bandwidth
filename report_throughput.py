@@ -34,16 +34,19 @@ def main(argv):
 
 	al = False
 	max_wanted = False
+	flows_wanted = False
 	switch = None
 	port = None				
 
 	try:
-		opts, args = getopt.getopt(argv,"mas:p:",[])
+		opts, args = getopt.getopt(argv,"fmas:p:",[])
 	except getopt.GetoptError:
 		print usage
 		sys.exit(2)
 	for opt, arg in opts:
-		if opt == '-m':
+		if opt == '-f':
+			flows_wanted = True
+		elif opt == '-m':
 			max_wanted = True
 		elif opt == '-a':
 			al = True
@@ -56,11 +59,11 @@ def main(argv):
 			sys.exit(2)
 
 	if al == True:
-		pprint(http_client.call("report_all_ports",max_wanted))
+		pprint(http_client.call("report_all_ports", flows_wanted, max_wanted))
 	elif switch is not None and port is not None:
-		pprint(http_client.call("report_port", max_wanted, switch, port))
+		pprint(http_client.call("report_port", flows_wanted,  max_wanted, switch, port))
 	elif switch is not None:
-		pprint(http_client.call("report_switch_ports", max_wanted, switch))
+		pprint(http_client.call("report_switch_ports", flows_wanted,  max_wanted, switch))
 	else:
 		print usage
 

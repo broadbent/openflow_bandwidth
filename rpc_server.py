@@ -21,23 +21,29 @@ class rpc_server:
 		http_server.flow_max = flow_max
 		http_server.serve_forever()
 
+class Error(Exception):
+    pass
+
 class RequestHandler(pyjsonrpc.HttpRequestHandler):
+        def select_stats(self, flows_wanted, max_wanted):
+	    return ( self.server.flow_max if flows_wanted else self.server.port_max) if max_wanted else (self.server.flow_rate if flows_wanted else self.server.port_rate)
+        
 	@pyjsonrpc.rpcmethod
-	def report_port(self,  max_wanted, switch, port):
-                stats = self.server.port_max if max_wanted else self.server.port_rate
+	def report_port(self, flows_wanted,  max_wanted, switch, port):
+                stats = self.select_stats(flows_wanted, max_wanted)
                 if  int(switch) in stats:
                     if int(port) in stats[int(switch)]:
                         return stats[int(switch)][int(port)]
                     else:
-                        print "invalid port reference"
+                        print "invalid port/flow reference"
                         return {}
                 else:
                     print "invalid switch reference"
                     return {}
 
 	@pyjsonrpc.rpcmethod
-	def report_switch_ports(self, max_wanted,  switch):
-                stats = self.server.port_max if max_wanted else self.server.port_rate
+	def report_switch_ports(self, flows_wanted, max_wanted,  switch):
+                stats = self.select_stats(flows_wanted, max_wanted)
                 if  int(switch) in stats:
                     return stats[int(switch)]
                 else:
@@ -45,10 +51,9 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
                     return {}
 
 	@pyjsonrpc.rpcmethod
-	def report_all_ports(self, max_wanted):
-                stats = self.server.port_max if max_wanted else self.server.port_rate
-                pprint(stats)
-		return stats
+	def report_all_ports(self, flows_wanted, max_wanted):
+	    print ("self.select_stats(%r,%r)" % (flows_wanted, max_wanted))
+            return self.select_stats(flows_wanted, max_wanted)
 
 	@pyjsonrpc.rpcmethod
 	def reset_port(self, switch, port):
