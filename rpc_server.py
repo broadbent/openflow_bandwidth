@@ -21,7 +21,7 @@ class rpc_server:
 class RequestHandler(pyjsonrpc.HttpRequestHandler):
 	@pyjsonrpc.rpcmethod
 	def report_port(self, switch, port):
-                print "report_port(switch=%s, port=%s)" % ( switch , port )
+                # print "report_port(switch=%s, port=%s)" % ( switch , port )
                 if  int(switch) in self.server.max_throughput:
                     if int(port) in self.server.max_throughput[int(switch)]:
                         return self.server.max_throughput[int(switch)][int(port)]
@@ -34,7 +34,7 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
 
 	@pyjsonrpc.rpcmethod
 	def report_switch_ports(self, switch):
-                print "report_switch_ports(switch=%s)" % switch
+                # print "report_switch_ports(switch=%s)" % switch
                 if  int(switch) in self.server.max_throughput:
                     return self.server.max_throughput[int(switch)]
                 else:
@@ -43,7 +43,7 @@ class RequestHandler(pyjsonrpc.HttpRequestHandler):
 
 	@pyjsonrpc.rpcmethod
 	def report_all_ports(self):
-                print "report_all_ports()"
+                # print "report_all_ports()"
 		return self.server.max_throughput
 
 	@pyjsonrpc.rpcmethod

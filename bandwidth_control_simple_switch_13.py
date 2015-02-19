@@ -45,7 +45,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         switchPoll = SwitchPoll()
         pollThread = Thread(target=switchPoll.run, args=(10,self.datapathdict))
         pollThread.start()
-        print "Created polling threads"
+        # print "Created polling threads"
 
         self.LAST_TP_DICT = {}
         self.MAX_TP_DICT = {}
@@ -96,7 +96,7 @@ class SimpleSwitch13(app_manager.RyuApp):
     def add_flow(self, datapath, priority, match, actions, buffer_id=None, meter=None, timeout=0, cookie=0):
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-        print ("Add flow, %s" % hex(cookie))
+        # print ("Add flow, %s" % hex(cookie))
 
         # print "The meter is :",meter
         if meter != None:
@@ -118,7 +118,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         #Edit this
     def add_meter_port(self, datapath_id, port_no, speed):
-        print "ADDING METER TO PORT"
+        # print "ADDING METER TO PORT"
 
 	datapath_id = int(datapath_id)
 	
@@ -134,12 +134,13 @@ class SimpleSwitch13(app_manager.RyuApp):
 
 	#METER ID's WILL DIRECTLY RELATE TO PORT NUMBERS
         #change meter with meter_id <port_no>, on switch <datapath>, to have a rate of <speed>
-	print datapath_id
+	# print datapath_id
 	
 	if datapath_id in self.datapathID_to_meters:
-        	port_to_meter= self.datapathID_to_meters[datapath_id]
+            port_to_meter= self.datapathID_to_meters[datapath_id]
 	else:
-		print "not in"
+            # print "not in"
+            pass
         bands=[]
         #set starting bit rate of meter
         dropband = parser.OFPMeterBandDrop(rate=int(speed), burst_size=0)
@@ -150,7 +151,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         #Create meter
         request = parser.OFPMeterMod(datapath=datapath,command=ofproto.OFPMC_ADD, flags=ofproto.OFPMF_KBPS,meter_id=int(port_no),bands=bands)
         datapath.send_msg(request)
-	print request
+	# print request
         #Prvent overwriting incase rule added before traffic seen
         port_to_meter[int(port_no)]=int(port_no)
 
@@ -160,7 +161,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         return 1
 
     def add_meter_service(self, datapath_id, src_addr, dst_addr, speed):
-        print "ADDING METER FOR SERVICE"
+        # print "ADDING METER FOR SERVICE"
         datapath_id=int(datapath_id)
 	if datapath_id not in self.datapathdict:
             print "### Error: datapath_id not in self.datapathdict"
@@ -220,7 +221,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
 
         cookie = 0x7fffffff & crc32(str(datapath)+src_addr+dst_addr)
-        print "cookie: %s" % hex(cookie)
+        # print "cookie: %s" % hex(cookie)
         self.add_flow(datapath, 100, match, actions, buffer_id=None, meter=meter_id, timeout=0, cookie=cookie)
 
 
@@ -254,7 +255,7 @@ class SimpleSwitch13(app_manager.RyuApp):
         src = eth.src
 
         dpid = datapath.id
-	print('DPID', dpid)
+	# print('DPID', dpid)
         self.mac_to_port.setdefault(dpid, {})
 
         #self.logger.info("packet in %s %s %s %s", dpid, src, dst, in_port)
@@ -278,13 +279,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         #Create new meters
         #Check for flood, dont want to add meter for flood
         if out_port != ofproto.OFPP_FLOOD:
-             print "NOT A FLOOD PACKET"
+             # print "NOT A FLOOD PACKET"
              if out_port in port_to_meter:
                      #if the meter already exists for THIS SWITCH set instruction to use
-                     print "Meter already exists for this port"
+                     # print "Meter already exists for this port"
+                     pass
              else:
                  #This controller not added meter before, need to create one for this port
-                 print "NEW METER CREATED FOR :", out_port
+                 # print "NEW METER CREATED FOR :", out_port
                  bands=[]
                  #set starting bit rate of meter
                  dropband = parser.OFPMeterBandDrop(rate=1000000, burst_size=0)
