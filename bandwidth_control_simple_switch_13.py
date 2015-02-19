@@ -25,6 +25,8 @@ from collections import namedtuple
 
 PATH = os.path.dirname(__file__)
 
+TimedMeterRecord = namedtuple('TimedMeterRecord', ['packet_in_count','byte_in_count','packet_band_count','byte_band_count', 'duration_sec','duration_nsec'])
+MeterRecord = namedtuple('TimedMeterRecord', ['packet_in_count','byte_in_count','packet_band_count','byte_band_count'])
 StatRecord = namedtuple('StatRecord', ['tx_packets','rx_packets','tx_bytes','rx_bytes'])
 TimedStatRecord = namedtuple('TimedStatRecord', ['tx_packets','rx_packets','tx_bytes','rx_bytes', 'duration_sec','duration_nsec'])
 FlowStatRecord = namedtuple('TimedFlowStatRecord', ['packet_count', 'byte_count', 'match', 'table_id', 'priority'])
@@ -319,6 +321,27 @@ class SimpleSwitch13(app_manager.RyuApp):
         datapath.send_msg(out)
 
 
+    #handle meter stats replies
+    @set_ev_cls(ofp_event.EventOFPMeterStatsReply, MAIN_DISPATCHER)
+    def meter_stats_reply_handler(self, ev):
+
+        def _unpack(meterStats):
+            unpacked = {}
+            for statsEntry in meterStats:
+                meter = statsEntry.meter_id
+                first_band = statsEntry.band_stats[0]
+                assert len(statsEntry.band_stats) == 1 # this assertion ensures that the code is not used in more complex context than a single band without modification
+                assert statsEntry.flow_count < 2       # this assertion enures that the code is not used in more complex context than a single flow per meter without modification
+                unpacked[meter] = TimedMeterRecord (statsEntry.packet_in_count, statsEntry.byte_in_count, first_band.packet_band_count, first_band.byte_band_count, statsEntry.duration_sec, statsEntry.duration_nsec )
+            return unpacked
+
+        # self.logger.info("meter_stats_reply_handler - switch %d", ev.msg.datapath.id )
+        print "meter stats:"
+        # pprint(ev.msg.datapath.id)
+        # pprint(ev.msg.body)
+        meterStats = _unpack(ev.msg.body)
+        pprint(meterStats)
+
 
     #handle flow stats replies
     @set_ev_cls(ofp_event.EventOFPFlowStatsReply, MAIN_DISPATCHER)
@@ -329,17 +352,18 @@ class SimpleSwitch13(app_manager.RyuApp):
             for statsEntry in flowStats:
                 cookie = statsEntry.cookie
                 if cookie != 0: # we only will collect statistics which we have marked with a cookie...
-                    pprint(statsEntry)
                     unpacked[cookie] = TimedFlowStatRecord (statsEntry.packet_count, statsEntry.byte_count, statsEntry.match, statsEntry.table_id, statsEntry.priority, statsEntry.duration_sec, statsEntry.duration_nsec )
-                    pprint(unpacked)
             return unpacked
 
-        self.logger.info("flow_stats_reply_handler - switch %d", ev.msg.datapath.id )
+        # self.logger.info("flow_stats_reply_handler - switch %d", ev.msg.datapath.id )
         # pprint(ev.msg.datapath.id)
         # pprint(ev.msg.body)
         flowStats = _unpack(ev.msg.body)
-        print "flow stats:"
-        pprint(flowStats)
+        # print "flow stats:"
+        # pprint(flowStats)
+
+        # *** Unfinished stub - the returned flow stats should probably be saved in some global/persistent store.
+        # *** Unfinished because the HP switches were observed not to return byte conters for any of the flows.
 
 
     #handle port stats replies

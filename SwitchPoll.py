@@ -29,6 +29,13 @@ class SwitchPoll():
                                          0, 0, ofp_parser.OFPMatch())
         datapath.send_msg(req)
 
+    def send_meter_stats_request(self, datapath):
+        ofp = datapath.ofproto
+        ofp_parser = datapath.ofproto_parser
+        req = ofp_parser.OFPMeterStatsRequest(datapath, 0, ofp.OFPM_ALL)
+        datapath.send_msg(req)
+
+
 
     #input time for every request and list of switches to request to
     def run(self, pollTime,datapathdict):
@@ -37,4 +44,5 @@ class SwitchPoll():
             for the_key, datapath in datapathdict.iteritems():
                 self.send_port_stats_request(datapath)
                 self.send_flow_stats_request(datapath)
+                self.send_meter_stats_request(datapath)
             time.sleep(pollTime)
