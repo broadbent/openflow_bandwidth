@@ -19,7 +19,7 @@ from multiprocessing import Process
 import os
 from threading import *
 from pprint import pprint
-from zlib import crc32
+from zlib import crc32 # used to create unique cookies for flows
 import pyjsonrpc
 from collections import namedtuple
 
@@ -47,17 +47,14 @@ class SimpleSwitch13(app_manager.RyuApp):
         pollThread.start()
         # print "Created polling threads"
 
-        self.LAST_TP_DICT = {}
-        self.MAX_TP_DICT = {}
+        self.PORT_CURRENT = {}
+        self.PORT_MAX = {}
+        self.PORT_RATE = {}
         self.METER_CURRENT = {}
         self.METER_MAX = {}
         self.METER_RATE = {}
 
-        Thread(target=rpc_server().run, args=(1,self.MAX_TP_DICT,self.add_meter_port,self.add_meter_service)).start()
-        #-- Attempt at activly testing the network --#
-        #poutTask = PacketOutLoop()
-        #pollingThread2=Thread(target=poutTask.run,args=(10,self.datapathdict))
-        #pollingThread2.start()
+        Thread(target=rpc_server().run, args=(1,(self.PORT_RATE,self.PORT_MAX,self.METER_RATE,self.METER_MAX), self.add_meter_port,self.add_meter_service)).start()
 
         #Map for sw to meters to ports
         self.datapathID_to_meters = {}
@@ -68,6 +65,12 @@ class SimpleSwitch13(app_manager.RyuApp):
         self.datapathID_to_meter_ID= {}
 	self.datapath_to_flows = {}
 
+
+    @staticmethod
+    def diff_time (t1_sec, t1_nsec, t2_sec, t2_nsec):
+        def to_float (sec,nsec):
+            return float(sec) + float(nsec)/10E9
+        return to_float(t2_sec, t2_nsec) - to_float(t1_sec, t1_nsec)
 
     @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
     def switch_features_handler(self, ev):
@@ -372,25 +375,23 @@ class SimpleSwitch13(app_manager.RyuApp):
                     maxStats[meter] = MeterRecord(0,0,0,0)
                     rate[meter]     = MeterRecord(0,0,0,0)
                 else:
-                    if newStats[meter].duration_nsec < oldStats[meter].duration_nsec:
-                        delta_sec = newStats[meter].duration_sec - oldStats[meter].duration_sec -1
-                        delta_nsec = oldStats[meter].duration_nsec - newStats[meter].duration_nsec
+                    delta_time = self.diff_time(oldStats[meter].duration_sec, oldStats[meter].duration_nsec, newStats[meter].duration_sec, newStats[meter].duration_nsec)
+                    # print "delta time: %f\n" % delta_time
+                    if (delta_time<0):
+                        print "diff_time failure(flow stats)?"
+                        pprint(ev.msg.body)
                     else:
-                        delta_sec = newStats[meter].duration_sec - oldStats[meter].duration_sec
-                        delta_nsec = newStats[meter].duration_nsec - oldStats[meter].duration_nsec
-
-                    delta_time = ((10E9*delta_sec + delta_nsec) / 10E9)
     
-                    rate[meter] = MeterRecord ((newStats[meter].packet_in_count - oldStats[meter].packet_in_count) / delta_time,
-                                                    (newStats[meter].byte_in_count - oldStats[meter].byte_in_count) / delta_time,
-                                                    (newStats[meter].packet_band_count - oldStats[meter].packet_band_count) / delta_time,
-                                                    (newStats[meter].byte_band_count - oldStats[meter].byte_band_count) / delta_time)
+                        rate[meter] = MeterRecord ((newStats[meter].packet_in_count - oldStats[meter].packet_in_count) / delta_time,
+                                                        (newStats[meter].byte_in_count - oldStats[meter].byte_in_count) / delta_time,
+                                                        (newStats[meter].packet_band_count - oldStats[meter].packet_band_count) / delta_time,
+                                                        (newStats[meter].byte_band_count - oldStats[meter].byte_band_count) / delta_time)
+    
 
-
-                    maxStats[meter] = MeterRecord ( max(maxStats[meter].packet_in_count,rate[meter].packet_in_count),
-                                                  max(maxStats[meter].byte_in_count,rate[meter].byte_in_count),
-                                                  max(maxStats[meter].packet_band_count,rate[meter].packet_band_count),
-                                                  max(maxStats[meter].byte_band_count,rate[meter].byte_band_count) )
+                        maxStats[meter] = MeterRecord ( max(maxStats[meter].packet_in_count,rate[meter].packet_in_count),
+                                                      max(maxStats[meter].byte_in_count,rate[meter].byte_in_count),
+                                                      max(maxStats[meter].packet_band_count,rate[meter].packet_band_count),
+                                                      max(maxStats[meter].byte_band_count,rate[meter].byte_band_count) )
 
 
 # visualise the stats in the server side
@@ -399,9 +400,9 @@ class SimpleSwitch13(app_manager.RyuApp):
             # pprint(oldStats)
             # print "newStats"
             # pprint(newStats)
-            print "rate"
+            print "Flow - current"
             pprint(rate)
-            print "maxStats"
+            print "Flow - maximum"
             pprint(maxStats)
 
     #handle flow stats replies
@@ -439,50 +440,50 @@ class SimpleSwitch13(app_manager.RyuApp):
                     unpacked[port] = TimedPortStatRecord (statsEntry.tx_packets, statsEntry.rx_packets, statsEntry.tx_bytes, statsEntry.rx_bytes, statsEntry.duration_sec, statsEntry.duration_nsec )
             return unpacked
 
-        # currentMaxDictionary and currentLastDictionary are just references to the applicable persistent dictionary slice
 
         # on first entry for a switch just save the stats, initiliase the max counters to zero and exit
-        if ev.msg.datapath.id not in self.LAST_TP_DICT:
+        if ev.msg.datapath.id not in self.PORT_CURRENT:
             # self.logger.info("port_stats_reply_handler - first entry for switch %d", ev.msg.datapath.id )
-            self.LAST_TP_DICT[ev.msg.datapath.id] = _unpack(ev.msg.body)
-            self.MAX_TP_DICT[ev.msg.datapath.id] = {}
-            maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
+            self.PORT_CURRENT[ev.msg.datapath.id] = _unpack(ev.msg.body)
+            self.PORT_MAX[ev.msg.datapath.id] = {}
+            self.PORT_RATE[ev.msg.datapath.id] = {}
+            maxStats = self.PORT_MAX[ev.msg.datapath.id]
             for statsEntry in ev.msg.body:
                 if statsEntry.port_no != 4294967294: # this magic number is the 'local'port, which is not real....
                     maxStats[statsEntry.port_no] = PortStatRecord(0,0,0,0)
 
-        # we have a previous stats record so it is now possible to calculate the delta
-        else:
+        else: # we have a previous stats record so it is now possible to calculate the delta
             # self.logger.info("port_stats_reply_handler - repeat entry for switch %d", ev.msg.datapath.id )
-            oldStats = self.LAST_TP_DICT[ev.msg.datapath.id]
+            oldStats = self.PORT_CURRENT[ev.msg.datapath.id]
             newStats = _unpack(ev.msg.body)
-            
-            # save away this dataset for the next time around...
-            self.LAST_TP_DICT[ev.msg.datapath.id] = newStats
-            maxStats = self.MAX_TP_DICT[ev.msg.datapath.id]
-            # calculate deltas for all of the cumulative fields (tx/rx_packets/bytes,duration_sec/nsec)
-            # and also calculate new max values for all deltas
-            delta = {}
+            self.PORT_CURRENT[ev.msg.datapath.id] = newStats # save away this dataset for the next time around...
+            maxStats = self.PORT_MAX[ev.msg.datapath.id]     # always exists since it is initialised to zero on first stats report
+            rate     = self.PORT_RATE[ev.msg.datapath.id]
+
             for port in newStats:
-
-                if newStats[port].duration_nsec < oldStats[port].duration_nsec:
-                    delta_sec = newStats[port].duration_sec - oldStats[port].duration_sec -1
-                    delta_nsec = oldStats[port].duration_nsec - newStats[port].duration_nsec
+            # now check if there are any new ports in this report - in which case we cannot do anything other than initilaise the max values to zero
+                if port not in oldStats:
+                    maxStats[port] = PortStatRecord(0,0,0,0)
+                    rate[port]     = PortStatRecord(0,0,0,0)
                 else:
-                    delta_sec = newStats[port].duration_sec - oldStats[port].duration_sec
-                    delta_nsec = newStats[port].duration_nsec - oldStats[port].duration_nsec
+                    delta_time = self.diff_time(oldStats[port].duration_sec, oldStats[port].duration_nsec, newStats[port].duration_sec, newStats[port].duration_nsec)
+                    # print "delta time: %f\n" % delta_time
+                    if (delta_time<0):
+                        print "diff_time failure(port stats)?"
+                        pprint(ev.msg.body)
+                    else:
+    
+                        rate[port] = PortStatRecord ((newStats[port].tx_packets - oldStats[port].tx_packets) / delta_time,
+                                                        (newStats[port].rx_packets - oldStats[port].rx_packets) / delta_time,
+                                                        (newStats[port].tx_bytes - oldStats[port].tx_bytes) / delta_time,
+                                                        (newStats[port].rx_bytes - oldStats[port].rx_bytes) / delta_time)
 
-                delta[port] = TimedPortStatRecord (newStats[port].tx_packets - oldStats[port].tx_packets,
-                                               newStats[port].rx_packets - oldStats[port].rx_packets,
-                                               newStats[port].tx_bytes - oldStats[port].tx_bytes,
-                                               newStats[port].rx_bytes - oldStats[port].rx_bytes,
-                                               delta_sec,
-                                               delta_nsec )
 
-                maxStats[port] = PortStatRecord ( max(maxStats[port].tx_packets,delta[port].tx_packets),
-                                              max(maxStats[port].rx_packets,delta[port].rx_packets),
-                                              max(maxStats[port].tx_bytes,delta[port].tx_bytes),
-                                              max(maxStats[port].rx_bytes,delta[port].rx_bytes) )
+                        maxStats[port] = PortStatRecord ( max(maxStats[port].tx_packets,rate[port].tx_packets),
+                                                      max(maxStats[port].rx_packets,rate[port].rx_packets),
+                                                      max(maxStats[port].tx_bytes,rate[port].tx_bytes),
+                                                      max(maxStats[port].rx_bytes,rate[port].rx_bytes) )
+
 
 # visualise the stats in the server side
 
@@ -490,7 +491,8 @@ class SimpleSwitch13(app_manager.RyuApp):
             # pprint(oldStats)
             # print "newStats"
             # pprint(newStats)
-            # print "delta"
-            # pprint(delta)
-            # print "maxStats"
-            # pprint(maxStats)
+            print "Port - current"
+            pprint(rate)
+            print "Port - maximum"
+            pprint(maxStats)
+
