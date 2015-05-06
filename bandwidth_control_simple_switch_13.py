@@ -126,12 +126,12 @@ class SimpleSwitch13(app_manager.RyuApp):
         # print "ADDING METER TO PORT"
 
 	datapath_id = int(datapath_id)
-	
+
         if datapath_id not in self.datapathdict:
 		"dont have dick"
 		return -1
         datapath= self.datapathdict[datapath_id]
-        
+
 
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -140,7 +140,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 	#METER ID's WILL DIRECTLY RELATE TO PORT NUMBERS
         #change meter with meter_id <port_no>, on switch <datapath>, to have a rate of <speed>
 	# print datapath_id
-	
+
 	if datapath_id in self.datapathID_to_meters:
             port_to_meter= self.datapathID_to_meters[datapath_id]
 	else:
@@ -165,7 +165,7 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         return 1
 
-    def add_meter_service(self, datapath_id, src_addr, dst_addr, speed):
+    def add_meter_service(self, datapath_id, src_addr, dst_addr, speed, in_port):
         # print "ADDING METER FOR SERVICE"
         datapath_id=int(datapath_id)
 	if datapath_id not in self.datapathdict:
@@ -178,14 +178,14 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
-	
+
 
         if datapath_id in self.datapath_to_flows:
             flows = self.datapath_to_flows[datapath_id]
         else:
             flows = {}
             self.datapath_to_flows[datapath_id]=flows
-       
+
 
 	 #Check if meter id created for this switch
         if datapath_id in self.datapathID_to_meter_ID:
@@ -222,7 +222,10 @@ class SimpleSwitch13(app_manager.RyuApp):
 
         #create flow with <src> and <dst> - with a higher priority than normal switch behaviour -
         #action NORMAL && link to meter
-        match = parser.OFPMatch(eth_type=0x800, ipv4_src=src_addr, ipv4_dst=dst_addr)
+        if src_addr == '*':
+            match = parser.OFPMatch(eth_type=0x800, ipv4_dst=dst_addr, in_port=in_port)
+        else:
+            match = parser.OFPMatch(eth_type=0x800, ipv4_src=src_addr, ipv4_dst=dst_addr, in_port=in_port)
         actions = [parser.OFPActionOutput(ofproto.OFPP_NORMAL)]
 
         cookie = 0x7fffffff & crc32(str(datapath)+src_addr+dst_addr)
@@ -380,12 +383,12 @@ class SimpleSwitch13(app_manager.RyuApp):
                         print "diff_time failure(flow stats)?"
                         pprint(ev.msg.body)
                     else:
-    
+
                         rate[meter] = MeterRecord ((newStats[meter].packet_in_count - oldStats[meter].packet_in_count) / delta_time,
                                                         (newStats[meter].byte_in_count - oldStats[meter].byte_in_count) / delta_time,
                                                         (newStats[meter].packet_band_count - oldStats[meter].packet_band_count) / delta_time,
                                                         (newStats[meter].byte_band_count - oldStats[meter].byte_band_count) / delta_time)
-    
+
 
                         maxStats[meter] = MeterRecord ( max(maxStats[meter].packet_in_count,rate[meter].packet_in_count),
                                                       max(maxStats[meter].byte_in_count,rate[meter].byte_in_count),
@@ -471,7 +474,7 @@ class SimpleSwitch13(app_manager.RyuApp):
                         print "diff_time failure(port stats)?"
                         pprint(ev.msg.body)
                     else:
-    
+
                         rate[port] = PortStatRecord ((newStats[port].tx_packets - oldStats[port].tx_packets) / delta_time,
                                                         (newStats[port].rx_packets - oldStats[port].rx_packets) / delta_time,
                                                         (newStats[port].tx_bytes - oldStats[port].tx_bytes) / delta_time,

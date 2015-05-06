@@ -29,8 +29,9 @@ def main(argv):
 	src = args[1]
 	dst = args[2]
 	speed = args[3]
+	in_port = args[4]
 
-	meter_id = http_client.call("enforce_service", switch, src, dst, speed)
+	meter_id = http_client.call("enforce_service", switch, src, dst, speed, in_port)
         print "Meter ID is: %d" % meter_id
 
 if __name__ == '__main__':
